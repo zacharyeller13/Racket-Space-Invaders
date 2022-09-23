@@ -79,11 +79,11 @@
 (define-struct invader (x y dx))
 ;; Invader is (make-invader Number Number Number)
 ;; interp. the invader is at (x, y) in screen coordinates
-;;         the invader along x by dx pixels per clock tick
+;;         the invader along x by (* dx INVADER-X-SPEED) pixels per clock tick
 
-(define I1 (make-invader 150 100 12))           ;not landed, moving right
-(define I2 (make-invader 150 HEIGHT -10))       ;exactly landed, moving left
-(define I3 (make-invader 150 (+ HEIGHT 10) 10)) ;> landed, moving right
+(define I1 (make-invader 150 100 1))           ;not landed, moving right
+(define I2 (make-invader 150 HEIGHT -1))       ;exactly landed, moving left
+(define I3 (make-invader 150 (+ HEIGHT 1) 1)) ;> landed, moving right
 
 
 #;
@@ -152,25 +152,42 @@
 (define (main game)
   (big-bang game
     (on-tick next-scene)     ; Game -> Game
-    (to-draw render)         ; Game -> Image
-    (on-key handle-key)      ; Game KeyEvent -> Game
-    (stop-when game-over? end-game))) ; (Game -> Boolean) -> (Game -> Image)
+    (to-draw render)                ; Game -> Image
+    (stop-when game-over? end-game) ; (Game -> Boolean) -> (Game -> Image)
+    (on-key handle-key)))      ; Game KeyEvent -> Game
 
 ;; Game -> Game
-;; produce the next game scene by advancing invaders and missiles by their respective speeds
+;; produce the next game scene by:
+;; - advancing invaders
+;; - advancing missiles
+;; - moving tank
+;; - destroying any hit invaders
+;; - creating new invaders
 
-(define (next-scene game) BACKGROUND) ; stub
+;(define (next-scene game) BACKGROUND) ; stub
+
+(define (next-scene game)
+  (make-game (move-invaders (game-invaders game))
+             (move-missiles (game-missiles game))
+             (move-tank (game-tank game))))
 
 ;; Game -> Image
 ;; Render Game state on BACKGROUND
 
-(define (render game) BACKGROUND) ; stub
+; (define (render game) BACKGROUND) ; stub
+
+(define (render game)
+  (render-invaders (game-invaders game)
+                   (render-missiles (game-missiles game)
+                                    (render-tank (game-tank game)))))
 
 ;; Game KeyEvent -> Game
 ;; Handle key events:
 ;;    "left" moves tank left
 ;;    "right" moves tank right
 ;;    " " fires missile
+(check-expect (handle-key G2 "up") (make-game LOI2 (game-missiles G2)
+                                              (game-tank G2)))
 (check-expect (handle-key G2 " ") (make-game LOI2 (fire-missile (game-missiles G2) 
                                                                 (tank-x (game-tank G2)))
                                              (game-tank G2)))
@@ -191,9 +208,9 @@
                                       (go-left (game-tank game)))]
         [(key=? ke "right") (make-game (game-invaders game)
                                        (game-missiles game)
-                                       (go-right (game-tank game)))]))
+                                       (go-right (game-tank game)))]
+        [else game]))
                                    
-
 ;; Game -> Image
 ;; Display ENDGAME message
 
@@ -222,23 +239,39 @@
 ;; =================
 ;; Tank Helper Functions
 
+;; Tank Image -> Image
+;; Render tank on BACKGROUND
+(check-expect (render-tank T0) (place-image TANK
+                                            (tank-x T0)
+                                            (- HEIGHT TANK-HEIGHT/2)
+                                            BACKGROUND))
+
+; (define (render-tank t) BACKGROUND) ; stub
+
+(define (render-tank t)
+  (place-image TANK
+               (tank-x t)
+               (- HEIGHT TANK-HEIGHT/2)
+               BACKGROUND))
+
 ;; Tank -> Tank
 ;; Produce next tank
 (check-expect (move-tank T0) (make-tank (+ CTR-X TANK-SPEED) 1))
 (check-expect (move-tank T2) (make-tank (- 50 TANK-SPEED) -1))
-(check-expect (move-tank (make-tank WIDTH 1)) (make-tank WIDTH -1))
+(check-expect (move-tank (make-tank WIDTH 1)) (make-tank (- WIDTH 1) 0))
 
 ; (define (move-tank t) t) ; stub
 
 ; <use template from Tank>
 
 (define (move-tank t)
-  (cond [(offscreen? (tank-x t))
-         (make-tank (tank-x t)
-                    (change-direction (tank-dir t)))]
+  (cond [(>= (tank-x t) WIDTH)
+         (make-tank (- WIDTH 1) 0)]
+        [(<= (tank-x t) 0)
+         (make-tank 1 0)]
         [else
          (make-tank (+ (tank-x t)
-                       (* TANK-SPEED (tank-dir t)))
+                       (* (tank-dir t) TANK-SPEED))
                     (tank-dir t))]))
 
 ;; Tank -> Tank
@@ -246,6 +279,7 @@
 (check-expect (go-left T0) (make-tank (/ WIDTH 2) -1))
 (check-expect (go-left T1) (make-tank 50 -1))
 (check-expect (go-left T2) (make-tank 50 -1))
+(check-expect (go-left (make-tank WIDTH 1)) (make-tank 300 -1))
 
 ; (define (go-left t) t) ; stub
 
@@ -258,6 +292,7 @@
 (check-expect (go-right T0) (make-tank (/ WIDTH 2) 1))
 (check-expect (go-right T1) (make-tank 50 1))
 (check-expect (go-right T2) (make-tank 50 1))
+(check-expect (go-right (make-tank 0 -1)) (make-tank 0 1))
 
 ; (define (go-right t) t) ; stub
 
@@ -268,13 +303,37 @@
 ;; =================
 ;; Invader Helper Functions
 
+;; ListOfInvader Image -> Image
+;; Render all invaders on image input
+(check-expect (render-invaders LOI1 BACKGROUND) BACKGROUND)
+(check-expect (render-invaders LOI3 BACKGROUND) (place-image INVADER
+                                                             (invader-x I1)
+                                                             (invader-y I1)
+                                                             (place-image INVADER
+                                                                          (invader-x I2)
+                                                                          (invader-y I2)
+                                                                          BACKGROUND)))
+
+;(define (render-invaders loi img) img) ; stub
+
+; <template from ListOfInvader>
+
+(define (render-invaders loi img)
+  (cond [(empty? loi) img]
+        [else
+         (place-image INVADER
+                      (invader-x (first loi))
+                      (invader-y (first loi))
+                      (render-invaders (rest loi) img))]))
+
+
 ;; ListOfInvader -> ListOfInvader
 ;; Move all invaders in x and y directions
 (check-expect (move-invaders empty) empty)
-(check-expect (move-invaders LOI3) (list (make-invader (+ 150 (* 12 INVADER-X-SPEED))
-                                                       (+ 100 INVADER-Y-SPEED) 12)
-                                         (make-invader (- 150 (* 10 INVADER-X-SPEED))
-                                                       (+ HEIGHT INVADER-Y-SPEED) -10)))
+(check-expect (move-invaders LOI3) (list (make-invader (+ 150 (* 1 INVADER-X-SPEED))
+                                                       (+ 100 INVADER-Y-SPEED) 1)
+                                         (make-invader (- 150 (* 1 INVADER-X-SPEED))
+                                                       (+ HEIGHT INVADER-Y-SPEED) -1)))
 
 ; (define (move-invaders loi) loi) ; stub
 
@@ -288,27 +347,27 @@
 
 ;; Invader -> Invader
 ;; Produce next invader moved in x and y directions
-(check-expect (move-invader I1) (make-invader (+ 150 (* 12 INVADER-X-SPEED))
-                                              (+ 100 INVADER-Y-SPEED) 12))
-(check-expect (move-invader I2) (make-invader (- 150 (* 10 INVADER-X-SPEED))
-                                              (+ HEIGHT INVADER-Y-SPEED) -10))
+(check-expect (move-invader I1) (make-invader (+ 150 (* 1 INVADER-X-SPEED))
+                                              (+ 100 INVADER-Y-SPEED) 1))
+(check-expect (move-invader I2) (make-invader (- 150 (* 1 INVADER-X-SPEED))
+                                              (+ HEIGHT INVADER-Y-SPEED) -1))
 (check-expect (move-invader (make-invader 150 100 -12))
               (make-invader (- 150 (* 12 INVADER-X-SPEED))
                             (+ 100 INVADER-Y-SPEED) -12))
 (check-expect (move-invader (make-invader WIDTH 100 INVADER-X-SPEED))
-              (make-invader WIDTH 100 (* -1 INVADER-X-SPEED)))
+              (make-invader (- WIDTH 1) 100 (* -1 INVADER-X-SPEED)))
 (check-expect (move-invader (make-invader 0 100 (* -1 INVADER-X-SPEED)))
-              (make-invader 0 100 INVADER-X-SPEED))
+              (make-invader 1 100 INVADER-X-SPEED))
 
 ;(define (move-invader invader) invader) ; stub
 
 ; <use template from Invader>
 
 (define (move-invader i)
-  (cond [(offscreen? (invader-x i))
-         (make-invader (invader-x i)
-                       (invader-y i)
-                       (change-direction (invader-dx i)))]
+  (cond [(<= (invader-x i) 0)
+         (make-invader 1 (invader-y i) (change-direction (invader-dx i)))]
+        [(>= (invader-x i) WIDTH)
+         (make-invader (- WIDTH 1) (invader-y i) (change-direction (invader-dx i)))]
         [else
          (make-invader (+ (invader-x i) (* (invader-dx i) INVADER-X-SPEED))
                        (+ (invader-y i) INVADER-Y-SPEED)
@@ -316,6 +375,60 @@
 
 ;; =================
 ;; Missile Helper Functions
+
+;; ListOfMissile Image -> Image
+;; Render all missiles on image input
+(check-expect (render-missiles empty BACKGROUND) BACKGROUND)
+(check-expect (render-missiles LOM4 BACKGROUND) (place-image MISSILE
+                                                             (missile-x M1)
+                                                             (missile-y M1)
+                                                             (place-image MISSILE
+                                                                          (missile-x M2)
+                                                                          (missile-y M2)
+                                                                          (place-image MISSILE
+                                                                                       (missile-x M3)
+                                                                                       (missile-y M3)
+                                                                                       BACKGROUND))))
+
+; (define (render-missiles lom img) img) ; stub
+
+; <template from ListOfMissile>
+
+(define (render-missiles lom img)
+  (cond [(empty? lom) img]
+        [else
+         (place-image MISSILE
+                      (missile-x (first lom))
+                      (missile-y (first lom))
+                      (render-missiles (rest lom) img))]))
+
+
+;; ListOfMissile -> ListOfMissile
+;; Return list of missiles with each missile advanced 1 tick
+(check-expect (move-missiles empty) empty)
+(check-expect (move-missiles LOM3) (list (move-missile M1) (move-missile M2)))
+(check-expect (move-missiles (cons (make-missile 150 0) LOM3)) (list (move-missile M1) (move-missile M2)))
+
+;(define (move-missiles lom) lom) ; stub
+
+(define (move-missiles lom)
+  (cond [(empty? lom) empty]
+        [else
+         (if (<= (missile-y (first lom)) 0)
+             (move-missiles (rest lom))
+             (cons (move-missile (first lom))
+                   (move-missiles (rest lom))))]))
+
+;; Missile -> Missile
+;; Return missile advanced by 1 tick
+(check-expect (move-missile M1) (make-missile 150 (- 300 MISSILE-SPEED)))
+
+;(define (move-missile m) m) ; stub
+
+(define (move-missile m)
+  (make-missile (missile-x m)
+                (- (missile-y m) MISSILE-SPEED)))
+
 
 ;; ListOfMissile -> ListOfMissile
 ;; Return a list of missiles with a new missile added
