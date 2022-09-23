@@ -310,9 +310,18 @@
 
 (define (create-invaders loi)
   (cond [(< (random 100) INVADE-RATE)
-         (cons (make-invader (random WIDTH) 0 1) loi)]
+         (cons (make-invader (random WIDTH) 0 (rand-dx 1)) loi)]
         [else loi]))
 
+;; Integer -> Integer
+;; Return -1 or 1
+
+;(define (rand-dx i) i) ; stub
+
+(define (rand-dx i)
+  (if (= (modulo (random 2) 2) 0)
+         i
+        (- i)))
 
 ;; ListOfInvader Image -> Image
 ;; Render all invaders on image input
