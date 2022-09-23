@@ -21,7 +21,7 @@
 
 (define HIT-RANGE 10)
 
-(define INVADE-RATE 100)
+(define INVADE-RATE 5)
 
 (define BACKGROUND (empty-scene WIDTH HEIGHT))
 (define ENDGAME (text "Game Over" 24 "black"))
@@ -167,7 +167,7 @@
 ;(define (next-scene game) BACKGROUND) ; stub
 
 (define (next-scene game)
-  (make-game (move-invaders (game-invaders game))
+  (make-game (create-invaders (move-invaders (game-invaders game)))
              (move-missiles (game-missiles game))
              (move-tank (game-tank game))))
 
@@ -303,6 +303,17 @@
 ;; =================
 ;; Invader Helper Functions
 
+;; ListOfInvader -> ListOfInvader
+;; Return new list of invaders with added invader based on INVADE-RATE
+
+; (define (create-invaders loi) loi) ; stub
+
+(define (create-invaders loi)
+  (cond [(< (random 100) INVADE-RATE)
+         (cons (make-invader (random WIDTH) 0 1) loi)]
+        [else loi]))
+
+
 ;; ListOfInvader Image -> Image
 ;; Render all invaders on image input
 (check-expect (render-invaders LOI1 BACKGROUND) BACKGROUND)
@@ -404,10 +415,11 @@
 
 
 ;; ListOfMissile -> ListOfMissile
-;; Return list of missiles with each missile advanced 1 tick
+;; Return list of missiles with each missile advanced 1 tick, removing offscreen missiles
 (check-expect (move-missiles empty) empty)
 (check-expect (move-missiles LOM3) (list (move-missile M1) (move-missile M2)))
-(check-expect (move-missiles (cons (make-missile 150 0) LOM3)) (list (move-missile M1) (move-missile M2)))
+(check-expect (move-missiles (cons (make-missile 150 0) LOM3)) (list (move-missile M1) 
+                                                                     (move-missile M2)))
 
 ;(define (move-missiles lom) lom) ; stub
 
@@ -456,20 +468,6 @@
 
 ;; =================
 ;; Generic Helper Functions
-
-;; Integer -> Boolean
-;; Return true if
-;;    x <= 0
-;;    x >= WIDTH
-(check-expect (offscreen? WIDTH) true)
-(check-expect (offscreen? 0) true)
-(check-expect (offscreen? (invader-x I1)) false)
-
-; (define (offscreen? x) false) ; stub
-
-(define (offscreen? x)
-  (or (>= x WIDTH)
-      (<= x 0)))
 
 ;; Integer -> Integer
 ;; Return -1 * x-direction provided
