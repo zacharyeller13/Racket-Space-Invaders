@@ -21,7 +21,7 @@
 
 (define HIT-RANGE 10)
 
-(define INVADE-RATE 5)
+(define INVADE-RATE 3)
 
 (define BACKGROUND (empty-scene WIDTH HEIGHT))
 (define ENDGAME (text "Game Over" 24 "black"))
@@ -167,11 +167,23 @@
 ;(define (next-scene game) BACKGROUND) ; stub
 
 (define (next-scene game)
-  (make-game (destroy-invaders (create-invaders (move-invaders (game-invaders game)))
-                               (game-missiles game))
-             (destroy-missiles (game-invaders game)
-                               (move-missiles (game-missiles game)))
-             (move-tank (game-tank game))))
+  (destroy-objects (make-game (create-invaders (move-invaders (game-invaders game)))
+                              (move-missiles (game-missiles game))
+                              (move-tank (game-tank game)))))
+
+;; Game -> Game
+;; Destroy invaders and missiles
+(check-expect (destroy-objects G0) G0)
+(check-expect (destroy-objects G2) G2)
+(check-expect (destroy-objects G3) (make-game (list I2) (list M1) T1))
+
+; (define (destroy-objects game) game) ; stub
+
+(define (destroy-objects game)
+  (make-game (destroy-invaders (game-invaders game) (game-missiles game))
+             (destroy-missiles (game-missiles game) (game-invaders game))
+             (game-tank game)))
+
 
 ;; Game -> Image
 ;; Render Game state on BACKGROUND
@@ -429,29 +441,27 @@
 ;; =================
 ;; Missile Helper Functions
 
-;; ListOfInvader ListOfMissile -> ListOfMissile
-;; Return new list of missiles with missiles removed that destroyed invaders
+;; ListOfMissile ListOfInvader -> ListOfMissile
+;; Return new list of invaders with destroyed invaders removed
 (check-expect (destroy-missiles empty empty) empty)
-(check-expect (destroy-missiles empty LOM3) LOM3)
-(check-expect (destroy-missiles LOI3 LOM3) (list M1))
+(check-expect (destroy-missiles empty LOI3) empty)
+(check-expect (destroy-missiles LOM3 LOI3) (list M1))
 
-;(define (destroy-missiles lom loi) lom) ; stub
+;(define (destroy-invaders loi lom) loi) ; stub
 
-(define (destroy-missiles loi lom)
-  (cond [(or (empty? loi) (empty? lom)) lom]
+(define (destroy-missiles lom loi)
+  (cond [(or (empty? lom) (empty? loi)) lom]
         [else
          (if (destroy-missile (first lom) loi)
              (rest lom)
-             (cons (first lom) (destroy-missiles loi (rest lom))))]))
+             (cons (first lom) (destroy-missiles (rest lom) loi)))]))
 
-;; Missile ListOfInvader -> Boolean
+;; Invader ListOfMissile -> Boolean
 ;; Return true if missile-x, missile-y within HIT-RANGE of invader-x, invader-y
 (check-expect (destroy-missile M2 LOI3) true)
-(check-expect (destroy-missile M2 empty) false)
-(check-expect (destroy-missile M1 LOI3) false)
+(check-expect (destroy-missile (make-missile 200 150 ) LOI3) false)
 
-
-; (define (destroy-missile m loi) false) ; stub
+;(define (destroy-invader i lom) false) ; stub
 
 (define (destroy-missile m loi)
   (cond [(empty? loi) false]
@@ -460,7 +470,6 @@
                   (<= (abs (- (invader-y (first loi)) (missile-y m))) HIT-RANGE))
              true
              (destroy-missile m (rest loi)))]))
-
 
 ;; ListOfMissile Image -> Image
 ;; Render all missiles on image input
